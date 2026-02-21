@@ -5,7 +5,8 @@
     "facturero-sri-authorizer": "bin/facturero-sri-authorizer.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run build:lambda",
+    "build:lambda": "cd lambda/authorizer && npm install && npm run build",
     "watch": "tsc -w",
     "test": "jest",
     "cdk": "cdk"
