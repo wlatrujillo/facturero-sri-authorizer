@@ -2,8 +2,7 @@ import { SQSHandler, SQSBatchResponse } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { Client, createClientAsync } from 'soap';
-import { SriEnv, VoucherStatus } from './enums';
-import { IVoucherId, IVoucher, VoucherMessage } from './models';
+import { SriEnv, VoucherStatus, IVoucherId, IVoucher, VoucherMessage } from './types';
 
 const dynamoClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(dynamoClient);

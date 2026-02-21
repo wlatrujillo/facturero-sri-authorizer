@@ -42,7 +42,8 @@ export class FactureroSriAuthorizerStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(60),
       environment: {
         TABLE_NAME: voucherTable.tableName,
-        SRI_ENDPOINT: process.env.SRI_ENDPOINT || 'https://cel.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline',
+        SRI_ENDPOINT: process.env.SRI_ENDPOINT || 'https://cel.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl',
+        SRI_TEST_ENDPOINT: process.env.SRI_TEST_ENDPOINT || 'https://celcer.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl'
       },
     });
 
