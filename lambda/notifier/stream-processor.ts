@@ -1,9 +1,12 @@
 import { DynamoDBStreamEvent, DynamoDBRecord } from 'aws-lambda';
 import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
+import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
 
 const snsClient = new SNSClient({});
+const sqsClient = new SQSClient({});
 const TOPIC_ARN = process.env.TOPIC_ARN!;
+const AUTHORIZER_QUEUE_URL = process.env.AUTHORIZER_QUEUE_URL!;
 
 export const handler = async (event: DynamoDBStreamEvent): Promise<void> => {
   console.log('Processing DynamoDB Stream event', JSON.stringify(event, null, 2));
@@ -48,8 +51,31 @@ async function processRecord(record: DynamoDBRecord): Promise<void> {
 
   console.log(`Status change: ${oldStatus} -> ${newStatus}`);
 
+  if (oldStatus !== 'RECEIVED' && newStatus === 'RECEIVED') {
+    if (!newData.accessKey) {
+      console.warn('Skipping SQS publish: missing accessKey in DynamoDB NewImage', {
+        tableName,
+        eventID: record.eventID,
+      });
+      return;
+    }
+
+    console.log(`Status changed to ${newStatus}, publishing to SQS authorizer queue`);
+    await publishToAuthorizerQueue(newData, tableName);
+  }
+
   // Check if status changed from RECEIVED or PROCESSING to AUTHORIZED
   if ((oldStatus === 'RECEIVED' || oldStatus === 'PROCESSING') && newStatus === 'AUTHORIZED') {
+    if (!newData.accessKey || !newData.status) {
+      console.warn('Skipping SNS publish: missing required fields in DynamoDB NewImage', {
+        tableName,
+        eventID: record.eventID,
+        hasAccessKey: Boolean(newData.accessKey),
+        hasStatus: Boolean(newData.status),
+      });
+      return;
+    }
+
     console.log(`Status changed from ${oldStatus} to ${newStatus}, publishing to SNS`);
     await publishToSns(newData, tableName);
   }
@@ -80,4 +106,21 @@ async function publishToSns(data: any, tableName: string = 'prd-facturero-sri-vo
 
   const result = await snsClient.send(command);
   console.log('SNS message published:', result.MessageId);
+}
+
+async function publishToAuthorizerQueue(data: any, tableName: string = 'prd-facturero-sri-vouchers'): Promise<void> {
+  const message = {
+    accessKey: data.accessKey,
+    tableName,
+    eventType: 'AUTHORIZE_VOUCHER',
+    timestamp: new Date().toISOString()
+  };
+
+  const command = new SendMessageCommand({
+    QueueUrl: AUTHORIZER_QUEUE_URL,
+    MessageBody: JSON.stringify(message)
+  });
+
+  const result = await sqsClient.send(command);
+  console.log('SQS message published:', result.MessageId);
 }

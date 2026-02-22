@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib/core';
 import { Construct } from 'constructs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as path from 'path';
@@ -13,11 +14,18 @@ export class FactureroSriAuthorizerStack extends cdk.Stack {
 
     const environmentId = process.env.ENVIRONMENT_ID || 'dev';
     const voucherTableName = `${environmentId}-facturero-sri-vouchers`;
+    const voucherBucketName = `${environmentId}-facturero-sri-vouchers`;
 
     const voucherTable = dynamodb.Table.fromTableName(
       this,
       `${environmentId}-VoucherAuthorizationTable`,
       voucherTableName
+    );
+
+    const voucherBucket = s3.Bucket.fromBucketName(
+      this,
+      `${environmentId}-VoucherBucket`,
+      voucherBucketName
     );
 
     // Dead Letter Queue
@@ -44,6 +52,7 @@ export class FactureroSriAuthorizerStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(60),
       environment: {
         TABLE_NAME: voucherTable.tableName,
+        BUCKET_NAME: voucherBucket.bucketName,
         SRI_ENDPOINT: process.env.SRI_ENDPOINT || 'https://cel.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl',
         SRI_TEST_ENDPOINT: process.env.SRI_TEST_ENDPOINT || 'https://celcer.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl'
       },
@@ -52,6 +61,7 @@ export class FactureroSriAuthorizerStack extends cdk.Stack {
 
     // Grant permissions
     voucherTable.grantReadWriteData(authorizerFunction);
+    voucherBucket.grantPut(authorizerFunction);
     authorizerQueue.grantConsumeMessages(authorizerFunction);
     deadLetterQueue.grantSendMessages(authorizerFunction);
 

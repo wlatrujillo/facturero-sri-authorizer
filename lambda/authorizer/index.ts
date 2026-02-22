@@ -1,13 +1,16 @@
 import type { SQSHandler, SQSBatchResponse, SQSEvent } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { Client, createClientAsync } from 'soap';
 import { SriEnv, VoucherStatus, IVoucherId, IVoucher, VoucherMessage } from './types';
 
 const dynamoClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
+const s3Client = new S3Client({});
 
 const TABLE_NAME = process.env.TABLE_NAME;
+const BUCKET_NAME = process.env.BUCKET_NAME;
 const SRI_AUTH_ENDPOINT = process.env.SRI_ENDPOINT || 'https://cel.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl';
 const SRI_AUTH_TEST_ENDPOINT = process.env.SRI_TEST_ENDPOINT || 'https://celcer.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl';
 
@@ -98,6 +101,24 @@ async function authorizeSriVoucher(accessKey: string, environment: SriEnv): Prom
     }
 }
 
+async function storeAuthorizedVoucherXml(companyId: string, accessKey: string, voucherXml: string): Promise<void> {
+    if (!BUCKET_NAME) {
+        console.warn('Skipping XML upload: BUCKET_NAME is not configured');
+        return;
+    }
+
+    const key = `${companyId}/autorizados/${accessKey}_aut.xml`;
+
+    await s3Client.send(new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: key,
+        Body: voucherXml,
+        ContentType: 'application/xml; charset=utf-8',
+    }));
+
+    console.log(`Authorized XML stored in s3://${BUCKET_NAME}/${key}`);
+}
+
 /**
  * Process a single voucher authorization
  */
@@ -121,6 +142,10 @@ async function processVoucher(message: VoucherMessage): Promise<void> {
     try {
         // Call SRI authorization service
         const { authorized, details } = await authorizeSriVoucher(accessKey, voucherId.environment);
+
+        if (authorized && details?.voucher) {
+            await storeAuthorizedVoucherXml(companyId, accessKey, details.voucher);
+        }
 
         // Update status based on authorization result
         const status = authorized ? VoucherStatus.AUTHORIZED : VoucherStatus.NOT_AUTHORIZED;

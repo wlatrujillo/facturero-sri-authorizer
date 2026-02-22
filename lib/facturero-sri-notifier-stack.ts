@@ -6,6 +6,7 @@ import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as snsSubscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as path from 'path';
 
@@ -18,6 +19,16 @@ export class FactureroSriNotifierStack extends cdk.Stack {
         if (!environmentId) {
             throw new Error('Missing required environment variable: ENVIRONMENT_ID');
         }
+
+        const authorizerQueue = sqs.Queue.fromQueueArn(
+            this,
+            `${environmentId}-FactureroSriAuthorizerQueueRef`,
+            cdk.Stack.of(this).formatArn({
+                service: 'sqs',
+                resource: `${environmentId}-facturero-sri-authorizer-queue`
+            })
+        );
+
         // Create SNS topic for email notifications
         const emailTopic = new sns.Topic(this, 'FactureroSriNotifierTopic', {
             topicName: `${environmentId}-facturero-sri-notifier-topic`,
@@ -43,9 +54,9 @@ export class FactureroSriNotifierStack extends cdk.Stack {
             resources: ['*']
         }));
 
-        const productionBucket = s3.Bucket.fromBucketName(this, 'SriVouchersProductionBucket', `${environmentId}-facturero-sri-vouchers`);
+        const vouchersBucket = s3.Bucket.fromBucketName(this, 'SriVouchersProductionBucket', `${environmentId}-facturero-sri-vouchers`);
 
-        productionBucket.grantRead(sendEmailFunction);
+        vouchersBucket.grantRead(sendEmailFunction);
 
         // Reference existing DynamoDB table with stream enabled
         const latestStreamArnVouchersTable: string = `arn:aws:dynamodb:us-east-1:030608081964:table/${environmentId}-facturero-sri-vouchers/stream/2026-02-17T17:56:56.997`;
@@ -65,7 +76,8 @@ export class FactureroSriNotifierStack extends cdk.Stack {
             runtime: cdk.aws_lambda.Runtime.NODEJS_24_X,
             timeout: cdk.Duration.seconds(60),
             environment: {
-                TOPIC_ARN: emailTopic.topicArn
+                TOPIC_ARN: emailTopic.topicArn,
+                AUTHORIZER_QUEUE_URL: authorizerQueue.queueUrl
             }
         });
 
@@ -83,6 +95,9 @@ export class FactureroSriNotifierStack extends cdk.Stack {
 
         // Grant read permissions on DynamoDB streams
         vouchersTable.grantStreamRead(streamProcessorFunction);
+
+        // Grant permissions to publish to SQS authorizer queue
+        authorizerQueue.grantSendMessages(streamProcessorFunction);
     }
 
 
