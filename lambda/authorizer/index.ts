@@ -7,7 +7,7 @@ import { SriEnv, VoucherStatus, IVoucherId, IVoucher, VoucherMessage } from './t
 const dynamoClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
-const TABLE_NAME = process.env.TABLE_NAME! || 'prd-facturero-sri-vouchers';
+const TABLE_NAME = process.env.TABLE_NAME;
 const SRI_AUTH_ENDPOINT = process.env.SRI_ENDPOINT || 'https://cel.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl';
 const SRI_AUTH_TEST_ENDPOINT = process.env.SRI_TEST_ENDPOINT || 'https://celcer.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl';
 

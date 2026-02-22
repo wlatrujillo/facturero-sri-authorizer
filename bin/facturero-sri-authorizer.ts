@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib/core';
 import { FactureroSriAuthorizerStack } from '../lib/facturero-sri-authorizer-stack';
+import { FactureroSriNotifierStack } from '../lib/facturero-sri-notifier-stack';
 
 const app = new cdk.App();
 new FactureroSriAuthorizerStack(app, 'FactureroSriAuthorizerStack', {
@@ -11,10 +12,14 @@ new FactureroSriAuthorizerStack(app, 'FactureroSriAuthorizerStack', {
   /* Uncomment the next line to specialize this stack for the AWS Account
    * and Region that are implied by the current CLI configuration. */
   // env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION },
-
+  stackName: `${process.env.ENVIRONMENT_ID || 'dev'}-facturero-sri-authorizer`,
   /* Uncomment the next line if you know exactly what Account and Region you
    * want to deploy the stack to. */
   // env: { account: '123456789012', region: 'us-east-1' },
 
   /* For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html */
+});
+
+new FactureroSriNotifierStack(app, 'FactureroSriNotifierStack', {
+  stackName: `${process.env.ENVIRONMENT_ID || 'dev'}-facturero-sri-notifier`,
 });

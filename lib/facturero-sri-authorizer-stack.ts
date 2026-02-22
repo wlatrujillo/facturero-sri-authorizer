@@ -9,24 +9,26 @@ import * as path from 'path';
 export class FactureroSriAuthorizerStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
+    cdk.Tags.of(this).add('Module', 'facturero-sri');
 
-    const voucherTableName = 'prd-facturero-sri-vouchers';
+    const environmentId = process.env.ENVIRONMENT_ID || 'dev';
+    const voucherTableName = `${environmentId}-facturero-sri-vouchers`;
 
     const voucherTable = dynamodb.Table.fromTableName(
       this,
-      'VoucherAuthorizationTable',
+      `${environmentId}-VoucherAuthorizationTable`,
       voucherTableName
     );
 
     // Dead Letter Queue
-    const deadLetterQueue = new sqs.Queue(this, 'SriAuthorizerDLQ', {
-      queueName: 'sri-authorizer-dlq',
+    const deadLetterQueue = new sqs.Queue(this, `${environmentId}-FactureroSriAuthorizerDLQ`, {
+      queueName: `${environmentId}-facturero-sri-authorizer-dlq`,
       retentionPeriod: cdk.Duration.days(14),
     });
 
     // Main SQS Queue with DLQ configuration
-    const authorizerQueue = new sqs.Queue(this, 'SriAuthorizerQueue', {
-      queueName: 'sri-authorizer-queue',
+    const authorizerQueue = new sqs.Queue(this, `${environmentId}-FactureroSriAuthorizerQueue`, {
+      queueName: `${environmentId}-facturero-sri-authorizer-queue`,
       visibilityTimeout: cdk.Duration.seconds(120),
       deadLetterQueue: {
         queue: deadLetterQueue,
@@ -35,7 +37,7 @@ export class FactureroSriAuthorizerStack extends cdk.Stack {
     });
 
     // Lambda function to process authorization
-    const authorizerFunction = new lambda.Function(this, 'SriAuthorizerFunction', {
+    const authorizerFunction = new lambda.Function(this, `${environmentId}-FactureroSriAuthorizerFunction`, {
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: 'index.handler',
       code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/authorizer')),
@@ -45,6 +47,7 @@ export class FactureroSriAuthorizerStack extends cdk.Stack {
         SRI_ENDPOINT: process.env.SRI_ENDPOINT || 'https://cel.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl',
         SRI_TEST_ENDPOINT: process.env.SRI_TEST_ENDPOINT || 'https://celcer.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl'
       },
+
     });
 
     // Grant permissions
@@ -61,17 +64,17 @@ export class FactureroSriAuthorizerStack extends cdk.Stack {
     );
 
     // Outputs
-    new cdk.CfnOutput(this, 'QueueURL', {
+    new cdk.CfnOutput(this, `${environmentId}-FactureroSriAuthorizerQueueURL`, {
       value: authorizerQueue.queueUrl,
       description: 'SRI Authorizer Queue URL',
     });
 
-    new cdk.CfnOutput(this, 'DLQueueURL', {
+    new cdk.CfnOutput(this, `${environmentId}-FactureroSriAuthorizerDLQueueURL`, {
       value: deadLetterQueue.queueUrl,
       description: 'Dead Letter Queue URL',
     });
 
-    new cdk.CfnOutput(this, 'TableName', {
+    new cdk.CfnOutput(this, `${environmentId}-FactureroSriAuthorizerTableName`, {
       value: voucherTable.tableName,
       description: 'Voucher Authorization Table Name',
     });
