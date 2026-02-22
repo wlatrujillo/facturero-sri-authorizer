@@ -35,9 +35,10 @@ npm install
 
 ## Configuration
 
-Set the SRI endpoint (optional, defaults to production):
+Set the existing DynamoDB table name (required) and SRI endpoint (optional):
 
 ```bash
+export VOUCHER_TABLE_NAME="your-existing-voucher-table"
 export SRI_ENDPOINT="https://cel.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline"
 ```
 
@@ -55,6 +56,12 @@ Deploy to AWS:
 
 ```bash
 npx cdk deploy
+```
+
+Or provide table names via CDK context:
+
+```bash
+npx cdk deploy -c voucherTableName=your-existing-voucher-table
 ```
 
 After deployment, note the output values:

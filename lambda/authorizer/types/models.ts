@@ -2,6 +2,7 @@ import { SriEnv, VoucherStatus } from "./enums";
 
 export interface IVoucherId {
     voucherType: string;
+    environment: SriEnv;
     establishment: string;
     branch: string;
     sequence: string;
@@ -22,5 +23,4 @@ export interface IVoucher {
 
 export interface VoucherMessage {
     accessKey: string;
-    env: SriEnv;
 }

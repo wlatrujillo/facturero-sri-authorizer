@@ -1,4 +1,4 @@
-import { SQSHandler, SQSBatchResponse } from 'aws-lambda';
+import type { SQSHandler, SQSBatchResponse, SQSEvent } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { Client, createClientAsync } from 'soap';
@@ -7,10 +7,9 @@ import { SriEnv, VoucherStatus, IVoucherId, IVoucher, VoucherMessage } from './t
 const dynamoClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
-const TABLE_NAME = process.env.TABLE_NAME!;
-const TABLE_NAME_TEST = process.env.TABLE_NAME_TEST!; // Optional separate table for test environment
-const SRI_AUTH_ENDPOINT = process.env.SRI_ENDPOINT || 'https://cel.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline';
-const SRI_AUTH_TEST_ENDPOINT = process.env.SRI_TEST_ENDPOINT || 'https://celcer.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline';
+const TABLE_NAME = process.env.TABLE_NAME! || 'prd-facturero-sri-vouchers';
+const SRI_AUTH_ENDPOINT = process.env.SRI_ENDPOINT || 'https://cel.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl';
+const SRI_AUTH_TEST_ENDPOINT = process.env.SRI_TEST_ENDPOINT || 'https://celcer.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl';
 
 
 /**
@@ -19,14 +18,13 @@ const SRI_AUTH_TEST_ENDPOINT = process.env.SRI_TEST_ENDPOINT || 'https://celcer.
 async function updateVoucherStatus(
     companyId: string,
     voucherId: IVoucherId,
-    env: SriEnv,
     status: VoucherStatus,
     messages?: any
 ): Promise<void> {
-    const tableName = env === SriEnv.TEST ? TABLE_NAME_TEST : TABLE_NAME;
+    const {voucherType, environment, establishment, branch, sequence} = voucherId;
     const params = {
-        TableName: tableName,
-        Key: { companyId, voucherId: `#${voucherId.voucherType}#${voucherId.establishment}#${voucherId.branch}#${voucherId.sequence}` },
+        TableName: TABLE_NAME,
+        Key: { companyId, voucherId: `#${voucherType}#${environment}#${establishment}#${branch}#${sequence}` },
         UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt, messages = :messages',
         ExpressionAttributeNames: {
             '#status': 'status',
@@ -41,11 +39,11 @@ async function updateVoucherStatus(
     await docClient.send(new UpdateCommand(params));
 }
 
-async function getVoucherStatus(companyId: string, voucherId: IVoucherId, env: SriEnv): Promise<IVoucher | null> {
-    const tableName = env === SriEnv.TEST ? TABLE_NAME_TEST : TABLE_NAME;
+async function getVoucherStatus(companyId: string, voucherId: IVoucherId): Promise<IVoucher | null> {
+    const {voucherType, environment, establishment, branch, sequence} = voucherId;
     const params = {
-        TableName: tableName,
-        Key: { companyId, voucherId: `#${voucherId.voucherType}#${voucherId.establishment}#${voucherId.branch}#${voucherId.sequence}` },
+        TableName: TABLE_NAME,
+        Key: { companyId, voucherId: `#${voucherType}#${environment}#${establishment}#${branch}#${sequence}` },
         ProjectionExpression: '#status',
         ExpressionAttributeNames: {
             '#status': 'status',
@@ -59,10 +57,9 @@ async function getVoucherStatus(companyId: string, voucherId: IVoucherId, env: S
 /**
  * Call SRI SOAP service for authorization
  */
-async function authorizeSriVoucher(voucherMessage: VoucherMessage): Promise<{ authorized: boolean; details: any }> {
-    const { accessKey, env } = voucherMessage;
+async function authorizeSriVoucher(accessKey: string, environment: SriEnv): Promise<{ authorized: boolean; details: any }> {
     try {
-        const endpoint = env === SriEnv.TEST ? SRI_AUTH_TEST_ENDPOINT : SRI_AUTH_ENDPOINT;
+        const endpoint = environment === SriEnv.TEST ? SRI_AUTH_TEST_ENDPOINT : SRI_AUTH_ENDPOINT;
         const client: Client = await createClientAsync(endpoint);
 
         // Call the SOAP method for authorization
@@ -105,13 +102,13 @@ async function authorizeSriVoucher(voucherMessage: VoucherMessage): Promise<{ au
  * Process a single voucher authorization
  */
 async function processVoucher(message: VoucherMessage): Promise<void> {
-    const { accessKey, env } = message;
+    const { accessKey } = message;
     console.log(`Processing voucher with accessKey: ${accessKey}`);
 
     const companyId = getCompanyIdFromAccessKey(accessKey);
     const voucherId = getVoucherKeyFromAccessKey(accessKey);
 
-    const currentVoucher = await getVoucherStatus(companyId, voucherId, env);
+    const currentVoucher = await getVoucherStatus(companyId, voucherId);
 
     if (!currentVoucher) {
         console.error(`Voucher not found for accessKey: ${accessKey}`);
@@ -119,15 +116,15 @@ async function processVoucher(message: VoucherMessage): Promise<void> {
     }
 
     // Update status to PROCESSING
-    await updateVoucherStatus(companyId, voucherId, env, VoucherStatus.PROCESSING);
+    await updateVoucherStatus(companyId, voucherId, VoucherStatus.PROCESSING);
 
     try {
         // Call SRI authorization service
-        const { authorized, details } = await authorizeSriVoucher(message);
+        const { authorized, details } = await authorizeSriVoucher(accessKey, voucherId.environment);
 
         // Update status based on authorization result
         const status = authorized ? VoucherStatus.AUTHORIZED : VoucherStatus.NOT_AUTHORIZED;
-        await updateVoucherStatus(companyId, voucherId, env, status, details);
+        await updateVoucherStatus(companyId, voucherId, status, details);
 
         console.log(`Voucher ${accessKey} status: ${status}`);
     } catch (error: any) {
@@ -145,12 +142,14 @@ const getCompanyIdFromAccessKey = (accessKey: string): string => {
 const getVoucherKeyFromAccessKey = (accessKey: string): IVoucherId => {
 
     const voucherTypeCode = accessKey.substring(8, 10);
+    const environment = accessKey.substring(23, 24) === '1' ? SriEnv.TEST : SriEnv.PRODUCTION;
     const estab = accessKey.substring(24, 27);
     const ptoEmi = accessKey.substring(27, 30);
     const secuencial = accessKey.substring(30, 39);
 
     return {
         voucherType: voucherTypeCode,
+        environment: environment,
         establishment: estab,
         branch: ptoEmi,
         sequence: secuencial
@@ -160,7 +159,7 @@ const getVoucherKeyFromAccessKey = (accessKey: string): IVoucherId => {
 /**
  * Lambda handler for SQS events
  */
-export const handler: SQSHandler = async (event: any): Promise<SQSBatchResponse> => {
+export const handler: SQSHandler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
     console.log('Received SQS event:', JSON.stringify(event));
 
     const batchItemFailures: SQSBatchResponse['batchItemFailures'] = [];

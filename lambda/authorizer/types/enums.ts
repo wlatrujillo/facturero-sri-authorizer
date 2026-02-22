@@ -1,6 +1,6 @@
 export enum SriEnv {
-    TEST = 'test',
-    PRODUCTION = 'production',
+    TEST = '1',
+    PRODUCTION = '2',
 }
 
 export enum VoucherStatus {

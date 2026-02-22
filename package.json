@@ -12,16 +12,20 @@
     "cdk": "cdk"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.152",
     "@types/jest": "^30",
     "@types/node": "^24.10.1",
+    "aws-cdk": "2.1105.0",
     "jest": "^30",
     "ts-jest": "^29",
-    "aws-cdk": "2.1105.0",
     "ts-node": "^10.9.2",
     "typescript": "~5.9.3"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.995.0",
+    "@aws-sdk/lib-dynamodb": "^3.995.0",
     "aws-cdk-lib": "^2.237.1",
-    "constructs": "^10.0.0"
+    "constructs": "^10.0.0",
+    "soap": "^1.7.1"
   }
 }

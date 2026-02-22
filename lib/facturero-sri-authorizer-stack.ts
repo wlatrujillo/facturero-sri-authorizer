@@ -10,13 +10,13 @@ export class FactureroSriAuthorizerStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // DynamoDB table to store authorization status
-    const voucherTable = new dynamodb.Table(this, 'VoucherAuthorizationTable', {
-      partitionKey: { name: 'accessKey', type: dynamodb.AttributeType.STRING },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.DESTROY, // Change to RETAIN for production
-      pointInTimeRecovery: true,
-    });
+    const voucherTableName = 'prd-facturero-sri-vouchers';
+
+    const voucherTable = dynamodb.Table.fromTableName(
+      this,
+      'VoucherAuthorizationTable',
+      voucherTableName
+    );
 
     // Dead Letter Queue
     const deadLetterQueue = new sqs.Queue(this, 'SriAuthorizerDLQ', {
@@ -27,7 +27,7 @@ export class FactureroSriAuthorizerStack extends cdk.Stack {
     // Main SQS Queue with DLQ configuration
     const authorizerQueue = new sqs.Queue(this, 'SriAuthorizerQueue', {
       queueName: 'sri-authorizer-queue',
-      visibilityTimeout: cdk.Duration.seconds(300),
+      visibilityTimeout: cdk.Duration.seconds(120),
       deadLetterQueue: {
         queue: deadLetterQueue,
         maxReceiveCount: 3, // Retry 3 times before sending to DLQ
