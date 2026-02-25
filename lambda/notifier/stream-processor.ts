@@ -2,6 +2,14 @@ import { DynamoDBStreamEvent, DynamoDBRecord } from 'aws-lambda';
 import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { unmarshall } from '@aws-sdk/util-dynamodb';
+import log4js = require('log4js');
+
+log4js.configure({
+  appenders: { out: { type: 'stdout' } },
+  categories: { default: { appenders: ['out'], level: process.env.LOG_LEVEL || 'info' } }
+});
+
+const logger = log4js.getLogger('notifier-stream-processor');
 
 const snsClient = new SNSClient({});
 const sqsClient = new SQSClient({});
@@ -9,13 +17,13 @@ const TOPIC_ARN = process.env.TOPIC_ARN!;
 const AUTHORIZER_QUEUE_URL = process.env.AUTHORIZER_QUEUE_URL!;
 
 export const handler = async (event: DynamoDBStreamEvent): Promise<void> => {
-  console.log('Processing DynamoDB Stream event', JSON.stringify(event, null, 2));
+  logger.info('Processing DynamoDB Stream event', JSON.stringify(event, null, 2));
 
   for (const record of event.Records) {
     try {
       await processRecord(record);
     } catch (error) {
-      console.error('Error processing record:', error);
+      logger.error('Error processing record:', error);
       throw error;
     }
   }
@@ -26,11 +34,11 @@ async function processRecord(record: DynamoDBRecord): Promise<void> {
   const eventSourceARN = record.eventSourceARN;
   const tableName = eventSourceARN?.split(':table/')[1]?.split('/stream')[0];
 
-  console.log('Event triggered from table:', tableName);
-  console.log('Record event name:', record.eventName);
+  logger.info('Event triggered from table:', tableName);
+  logger.info('Record event name:', record.eventName);
   // Only process MODIFY events
   if (record.eventName !== 'MODIFY') {
-    console.log('Skipping non-MODIFY event:', record.eventName);
+    logger.info('Skipping non-MODIFY event:', record.eventName);
     return;
   }
 
@@ -38,7 +46,7 @@ async function processRecord(record: DynamoDBRecord): Promise<void> {
   const newImage = record.dynamodb?.NewImage;
 
   if (!oldImage || !newImage) {
-    console.log('Missing old or new image');
+    logger.warn('Missing old or new image');
     return;
   }
 
@@ -49,25 +57,25 @@ async function processRecord(record: DynamoDBRecord): Promise<void> {
   const oldStatus = oldData.status;
   const newStatus = newData.status;
 
-  console.log(`Status change: ${oldStatus} -> ${newStatus}`);
+  logger.info(`Status change: ${oldStatus} -> ${newStatus}`);
 
   if ((newStatus === 'RECEIVED' || newStatus === 'PROCESSING') && oldStatus !== newStatus) {
     if (!newData.accessKey) {
-      console.warn('Skipping SQS publish: missing accessKey in DynamoDB NewImage', {
+      logger.warn('Skipping SQS publish: missing accessKey in DynamoDB NewImage', {
         tableName,
         eventID: record.eventID,
       });
       return;
     }
 
-    console.log(`Status changed to ${newStatus}, publishing to SQS authorizer queue`);
+    logger.info(`Status changed to ${newStatus}, publishing to SQS authorizer queue`);
     await publishToAuthorizerQueue(newData, tableName);
   }
 
   // Check if status changed from RECEIVED or PROCESSING to AUTHORIZED
   if ((oldStatus === 'RECEIVED' || oldStatus === 'PROCESSING') && newStatus === 'AUTHORIZED') {
     if (!newData.accessKey || !newData.status) {
-      console.warn('Skipping SNS publish: missing required fields in DynamoDB NewImage', {
+      logger.warn('Skipping SNS publish: missing required fields in DynamoDB NewImage', {
         tableName,
         eventID: record.eventID,
         hasAccessKey: Boolean(newData.accessKey),
@@ -76,7 +84,7 @@ async function processRecord(record: DynamoDBRecord): Promise<void> {
       return;
     }
 
-    console.log(`Status changed from ${oldStatus} to ${newStatus}, publishing to SNS`);
+    logger.info(`Status changed from ${oldStatus} to ${newStatus}, publishing to SNS`);
     await publishToSns(newData, tableName);
   }
 }
@@ -105,7 +113,7 @@ async function publishToSns(data: any, tableName: string = 'prd-facturero-sri-vo
   });
 
   const result = await snsClient.send(command);
-  console.log('SNS message published:', result.MessageId);
+  logger.info('SNS message published:', result.MessageId);
 }
 
 async function publishToAuthorizerQueue(data: any, tableName: string = 'prd-facturero-sri-vouchers'): Promise<void> {
@@ -122,5 +130,5 @@ async function publishToAuthorizerQueue(data: any, tableName: string = 'prd-fact
   });
 
   const result = await sqsClient.send(command);
-  console.log('SQS message published:', result.MessageId);
+  logger.info('SQS message published:', result.MessageId);
 }

@@ -51,6 +51,7 @@ export class FactureroSriAuthorizerStack extends cdk.Stack {
       code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/authorizer')),
       timeout: cdk.Duration.seconds(60),
       environment: {
+        LOG_LEVEL: 'info',
         TABLE_NAME: voucherTable.tableName,
         BUCKET_NAME: voucherBucket.bucketName,
         SRI_ENDPOINT: process.env.SRI_ENDPOINT || 'https://cel.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl',

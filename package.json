@@ -23,15 +23,16 @@
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.995.0",
-    "@aws-sdk/lib-dynamodb": "^3.995.0",
     "@aws-sdk/client-s3": "^3.879.0",
-    "@aws-sdk/client-sqs": "^3.991.0",
     "@aws-sdk/client-ses": "^3.879.0",
     "@aws-sdk/client-sns": "^3.991.0",
+    "@aws-sdk/client-sqs": "^3.991.0",
+    "@aws-sdk/lib-dynamodb": "^3.995.0",
     "aws-cdk-lib": "^2.237.1",
     "constructs": "^10.0.0",
-    "soap": "^1.7.1",
     "fast-xml-parser": "^5.3.6",
-    "pdf-lib": "^1.17.1"
+    "log4js": "^6.9.1",
+    "pdf-lib": "^1.17.1",
+    "soap": "^1.7.1"
   }
 }

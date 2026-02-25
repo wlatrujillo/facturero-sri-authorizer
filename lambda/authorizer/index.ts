@@ -4,6 +4,14 @@ import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from '@aws-sdk/lib-
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { Client, createClientAsync } from 'soap';
 import { SriEnv, VoucherStatus, IVoucherId, IVoucher, VoucherMessage } from './types';
+import log4js = require('log4js');
+
+log4js.configure({
+    appenders: { out: { type: 'stdout' } },
+    categories: { default: { appenders: ['out'], level: process.env.LOG_LEVEL || 'info' } }
+});
+
+const logger = log4js.getLogger('authorizer');
 
 const dynamoClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
@@ -68,7 +76,7 @@ async function authorizeSriVoucher(accessKey: string, environment: SriEnv): Prom
         // Call the SOAP method for authorization
         const [result, rawResponse] = await client.autorizacionComprobanteAsync({ claveAccesoComprobante: accessKey });
 
-        console.log('Resultado de autorización: ', result, 'Respuesta cruda: ', rawResponse);
+        logger.info('Resultado de autorización: ', result, 'Respuesta cruda: ', rawResponse);
 
         // Parse the response
         if (result?.RespuestaAutorizacionComprobante) {
@@ -96,14 +104,14 @@ async function authorizeSriVoucher(accessKey: string, environment: SriEnv): Prom
             details: result,
         };
     } catch (error: any) {
-        console.error('Error calling SRI service:', error);
+        logger.error('Error calling SRI service:', error);
         throw new Error(`SRI service error: ${error.message}`);
     }
 }
 
 async function storeAuthorizedVoucherXml(companyId: string, accessKey: string, voucherXml: string): Promise<void> {
     if (!BUCKET_NAME) {
-        console.warn('Skipping XML upload: BUCKET_NAME is not configured');
+        logger.warn('Skipping XML upload: BUCKET_NAME is not configured');
         return;
     }
 
@@ -116,7 +124,7 @@ async function storeAuthorizedVoucherXml(companyId: string, accessKey: string, v
         ContentType: 'application/xml; charset=utf-8',
     }));
 
-    console.log(`Authorized XML stored in s3://${BUCKET_NAME}/${key}`);
+    logger.info(`Authorized XML stored in s3://${BUCKET_NAME}/${key}`);
 }
 
 /**
@@ -124,7 +132,7 @@ async function storeAuthorizedVoucherXml(companyId: string, accessKey: string, v
  */
 async function processVoucher(message: VoucherMessage): Promise<void> {
     const { accessKey } = message;
-    console.log(`Processing voucher with accessKey: ${accessKey}`);
+    logger.info(`Processing voucher with accessKey: ${accessKey}`);
 
     const companyId = getCompanyIdFromAccessKey(accessKey);
     const voucherId = getVoucherKeyFromAccessKey(accessKey);
@@ -132,7 +140,7 @@ async function processVoucher(message: VoucherMessage): Promise<void> {
     const currentVoucher = await getVoucherStatus(companyId, voucherId);
 
     if (!currentVoucher) {
-        console.error(`Voucher not found for accessKey: ${accessKey}`);
+        logger.error(`Voucher not found for accessKey: ${accessKey}`);
         throw new Error(`Voucher not found for accessKey: ${accessKey}`);
     }
 
@@ -151,9 +159,9 @@ async function processVoucher(message: VoucherMessage): Promise<void> {
         const status = authorized ? VoucherStatus.AUTHORIZED : VoucherStatus.NOT_AUTHORIZED;
         await updateVoucherStatus(companyId, voucherId, status, details);
 
-        console.log(`Voucher ${accessKey} status: ${status}`);
+        logger.info(`Voucher ${accessKey} status: ${status}`);
     } catch (error: any) {
-        console.error(`Error processing voucher ${accessKey}:`, error);
+        logger.error(`Error processing voucher ${accessKey}:`, error);
         // Re-throw the error so SQS will retry
         throw error;
     }
@@ -185,7 +193,7 @@ const getVoucherKeyFromAccessKey = (accessKey: string): IVoucherId => {
  * Lambda handler for SQS events
  */
 export const handler: SQSHandler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
-    console.log('Received SQS event:', JSON.stringify(event));
+    logger.info('Received SQS event:', JSON.stringify(event));
 
     const batchItemFailures: SQSBatchResponse['batchItemFailures'] = [];
 
@@ -194,7 +202,7 @@ export const handler: SQSHandler = async (event: SQSEvent): Promise<SQSBatchResp
             const message: VoucherMessage = JSON.parse(record.body);
             await processVoucher(message);
         } catch (error: any) {
-            console.error(`Failed to process message ${record.messageId}:`, error);
+            logger.error(`Failed to process message ${record.messageId}:`, error);
 
             // Add to batch item failures to retry
             batchItemFailures.push({

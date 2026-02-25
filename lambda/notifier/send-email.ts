@@ -3,6 +3,14 @@ import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses';
 import type { SNSHandler, SNSEventRecord } from 'aws-lambda';
 import { XMLParser } from 'fast-xml-parser';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import log4js = require('log4js');
+
+log4js.configure({
+    appenders: { out: { type: 'stdout' } },
+    categories: { default: { appenders: ['out'], level: process.env.LOG_LEVEL || 'info' } }
+});
+
+const logger = log4js.getLogger('notifier-send-email');
 
 
 type EmailPayload = {
@@ -270,7 +278,7 @@ const processRecordEmail = async (
         }
     }));
 
-    console.log('Email sent successfully:', {
+    logger.info('Email sent successfully:', {
         messageId: record.Sns.MessageId,
         recipient,
         accessKey: payload.accessKey,
@@ -355,7 +363,7 @@ export const handler: SNSHandler = async (event) => {
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
 
-            console.error('Failed to process record:', {
+            logger.error('Failed to process record:', {
                 messageId: record.Sns.MessageId,
                 error: errorMessage,
                 message: record.Sns.Message
@@ -370,7 +378,7 @@ export const handler: SNSHandler = async (event) => {
 
     // If any messages failed, report them and throw to trigger retry
     if (failures.length > 0) {
-        console.error(`Failed to process ${failures.length} message(s):`, failures);
+        logger.error(`Failed to process ${failures.length} message(s):`, failures);
         throw new Error(`Failed to process ${failures.length} out of ${event.Records.length} messages`);
     }
 };

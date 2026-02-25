@@ -42,7 +42,8 @@ export class FactureroSriNotifierStack extends cdk.Stack {
             timeout: cdk.Duration.seconds(30),
             environment: {
                 SENDER_EMAIL: 'wladimir.trujillo.ec@gmail.com',
-                BUCKET: `${environmentId}-facturero-sri-vouchers`
+                BUCKET: `${environmentId}-facturero-sri-vouchers`,
+                LOG_LEVEL: 'info'
             }
         });
 
@@ -77,7 +78,8 @@ export class FactureroSriNotifierStack extends cdk.Stack {
             timeout: cdk.Duration.seconds(60),
             environment: {
                 TOPIC_ARN: emailTopic.topicArn,
-                AUTHORIZER_QUEUE_URL: authorizerQueue.queueUrl
+                AUTHORIZER_QUEUE_URL: authorizerQueue.queueUrl,
+                LOG_LEVEL: 'info'
             }
         });
 
