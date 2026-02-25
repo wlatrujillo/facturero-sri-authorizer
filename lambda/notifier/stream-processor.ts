@@ -51,7 +51,7 @@ async function processRecord(record: DynamoDBRecord): Promise<void> {
 
   console.log(`Status change: ${oldStatus} -> ${newStatus}`);
 
-  if (oldStatus !== 'RECEIVED' && newStatus === 'RECEIVED') {
+  if ((newStatus === 'RECEIVED' || newStatus === 'PROCESSING') && oldStatus !== newStatus) {
     if (!newData.accessKey) {
       console.warn('Skipping SQS publish: missing accessKey in DynamoDB NewImage', {
         tableName,
